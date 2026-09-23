@@ -1,3 +1,6 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+# 원본 ZIP 보관함(745MB)은 git에서 제외 — 추출된 assets/만 추적
+ASSET_ZIP/
+/build/

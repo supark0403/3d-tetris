@@ -1,217 +1,272 @@
 extends Node3D
-## 게임 루트: 메뉴 ↔ 플레이 ↔ 일시정지 ↔ 오버/클리어 상태머신
-## PC/모바일 분기, 마우스 캡처, HUD/디렉터 바인딩.
+## 게임 루트: TetrisGame(로직) + 3D 뷰 + UI 조립, 일시정지/재시작.
 
-enum State { MENU, PLAYING, PAUSED, OVER, CLEAR }
-
-var state: int = State.MENU
-var _menu: Control = null
-var _hud: CanvasLayer = null
-var _pause: Control = null
-var _end: Control = null
-var _touch: CanvasLayer = null
-var _arena: Node3D = null
-var _player: CharacterBody3D = null
-var _director: Node3D = null
-var _elapsed := 0.0
-
-const PlayerScript := preload("res://scripts/player/player.gd")
-const ArenaScript := preload("res://scripts/world/arena_builder.gd")
-const DirectorScript := preload("res://scripts/titan/titan_director.gd")
+var game: TetrisGame
+var view: Node3D
+var _ui: CanvasLayer
+var _score_l: Label
+var _level_l: Label
+var _lines_l: Label
+var _combo_l: Label
+var _hold_pv: Control
+var _next_pvs: Array = []
+var _announce_l: Label
+var _announce_tw: Tween
+var _pause_panel: Control
+var _over_panel: Control
+var _over_score_l: Label
 
 func _ready() -> void:
-	process_mode = Node.PROCESS_MODE_ALWAYS
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	_show_menu()
+	game = TetrisGame.new()
+	add_child(game)
+	view = Node3D.new()
+	view.set_script(load("res://scripts/tetris/view3d.gd"))
+	add_child(view)
+	game.new_game()
+	view.attach(game)
+	_build_ui()
+	game.connect("stats_changed", _refresh_stats)
+	game.connect("announce", _announce)
+	game.connect("cleared", _on_cleared_ui)
+	game.connect("game_over", _show_over)
+	game.connect("active_changed", _refresh_previews)
+	_refresh_stats()
+	_refresh_previews()
 	if "--autotest" in OS.get_cmdline_user_args():
-		await get_tree().create_timer(0.5).timeout
-		print("[AUTOTEST] start_game")
-		start_game()
-		await get_tree().create_timer(2.0).timeout
-		_autotest_tick()
-
-var _autotest_done := false
-
-func _autotest_tick() -> void:
-	# 헤드리스 검증: 아레나/플레이어/디렉터/타이탄 스폰/훅/공격/일시정지/재개 경로 실행
-	print("[AUTOTEST] state=", state, " arena=", is_instance_valid(_arena), " player=", is_instance_valid(_player))
-	if is_instance_valid(_arena):
-		print("[AUTOTEST] arena_children=", _arena.get_child_count())
-	if is_instance_valid(_player):
-		print("[AUTOTEST] player_pos=", _player.global_position, " hp=", _player.hp)
-		_player._fire_hook(true)
-		_player._fire_hook(false)
-		print("[AUTOTEST] hooks=", _player.hook_l_on, _player.hook_r_on)
-		_player._try_attack()
-		_player.gain_xp(50.0)
-		print("[AUTOTEST] level=", _player.level, " xp_need=", _player.xp_need)
-		_player.take_damage(5.0)
-		print("[AUTOTEST] hp_after_dmg=", _player.hp)
-	if is_instance_valid(_director):
-		print("[AUTOTEST] director_elapsed=", _director.elapsed, " kills=", _director.kills)
-	pause_game()
-	print("[AUTOTEST] paused=", state)
-	resume_game()
-	print("[AUTOTEST] resumed=", state)
-	# 강제 타이탄 1마리 스폰 후 처치
-	if is_instance_valid(_director):
-		_director._spawn_one(0.5)
-		await get_tree().create_timer(1.0).timeout
-		var titans := get_tree().get_nodes_in_group("titan")
-		print("[AUTOTEST] titans=", titans.size())
-		for t in titans:
-			if t.has_method("take_damage"):
-				t.take_damage(9999.0)
-		await get_tree().create_timer(1.0).timeout
-		print("[AUTOTEST] kills_after=", _director.kills)
-	print("[AUTOTEST] PASS")
-	_autotest_done = true
-
-func _show_menu() -> void:
-	_clear_game_nodes()
-	state = State.MENU
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	var scr: Script = load("res://scripts/ui/main_menu.gd")
-	_menu = Control.new()
-	_menu.set_script(scr)
-	add_child(_menu)
-	_menu.connect("start_requested", start_game)
-
-func start_game() -> void:
-	_clear_game_nodes()
-	state = State.PLAYING
-	_elapsed = 0.0
-	var mobile := Settings.is_mobile()
-	# 아레나
-	_arena = Node3D.new()
-	_arena.set_script(ArenaScript)
-	add_child(_arena)
-	_arena.call("build", mobile)
-	# 플레이어
-	_player = CharacterBody3D.new()
-	_player.set_script(PlayerScript)
-	add_child(_player)
-	_player.global_position = Vector3(0, 1.0, 0)
-	# 디렉터
-	_director = Node3D.new()
-	_director.set_script(DirectorScript)
-	add_child(_director)
-	_director.call("start", _player)
-	# HUD
-	var hud_scr: Script = load("res://scripts/ui/hud.gd")
-	_hud = CanvasLayer.new()
-	_hud.set_script(hud_scr)
-	add_child(_hud)
-	# bind는 _ready 이후 프레임에 (CanvasLayer _ready 보장)
-	await get_tree().process_frame
-	if is_instance_valid(_hud) and _hud.has_method("bind_player"):
-		_hud.bind_player(_player)
-		_hud.bind_director(_director)
-	# 모바일 터치 UI
-	if mobile:
-		var tscr: Script = load("res://scripts/ui/touch_controls.gd")
-		_touch = CanvasLayer.new()
-		_touch.set_script(tscr)
-		add_child(_touch)
-		await get_tree().process_frame
-		if _touch.has_method("attach"):
-			_touch.attach(_player)
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	else:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	# 시그널
-	_player.connect("died", _on_player_died)
-	_director.connect("survived", _on_survived)
-
-func _clear_game_nodes() -> void:
-	for n in [_menu, _hud, _pause, _end, _touch, _arena, _player, _director]:
-		if is_instance_valid(n):
-			n.queue_free()
-	_menu = null
-	_hud = null
-	_pause = null
-	_end = null
-	_touch = null
-	_arena = null
-	_player = null
-	_director = null
-	get_tree().paused = false
+		_run_autotest()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("pause"):
-		match state:
-			State.PLAYING:
-				pause_game()
-			State.PAUSED:
-				resume_game()
+	if event.is_action_pressed("pause_game"):
+		if not game.over:
+			_toggle_pause()
+	elif event.is_action_pressed("restart_game"):
+		_restart()
 
-func _process(delta: float) -> void:
-	if state == State.PLAYING and is_instance_valid(_player) and is_instance_valid(_hud):
-		_elapsed += delta
-		if _hud.has_method("set_hook_text"):
-			_hud.set_hook_text(_player.hook_l_on, _player.hook_r_on)
+func _toggle_pause() -> void:
+	game.paused = not game.paused
+	Sfx.play("pause", 0.7)
+	_pause_panel.visible = game.paused
 
-func pause_game() -> void:
-	if state != State.PLAYING:
-		return
-	if is_instance_valid(_hud) and _hud.get("_levelup_layer") != null and is_instance_valid(_hud.get("_levelup_layer")):
-		return # 레벨업 선택 중에는 일시정지 금지 (모달 충돌 방지)
-	state = State.PAUSED
-	get_tree().paused = true
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	var scr: Script = load("res://scripts/ui/pause_menu.gd")
-	_pause = Control.new()
-	_pause.set_script(scr)
-	# CanvasLayer 없이 최상위 Control로 (3D 위에 그려지도록 z_index는 CanvasItem 기본)
-	add_child(_pause)
-	# 일시정지 중에도 UI 입력 받도록 process_mode 항상
-	_pause.process_mode = Node.PROCESS_MODE_ALWAYS
-	_pause.connect("resume_requested", resume_game)
-	_pause.connect("restart_requested", func() -> void: start_game())
-	_pause.connect("quit_to_menu", func() -> void: _show_menu())
+func _restart() -> void:
+	game.new_game()
+	_over_panel.visible = false
+	_pause_panel.visible = false
+	_refresh_stats()
+	_refresh_previews()
 
-func resume_game() -> void:
-	if state != State.PAUSED:
-		return
-	state = State.PLAYING
-	if is_instance_valid(_pause):
-		_pause.queue_free()
-	_pause = null
-	get_tree().paused = false
-	if not Settings.is_mobile():
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+# ---------- UI ----------
 
-func _on_player_died() -> void:
-	if state != State.PLAYING:
-		return
-	state = State.OVER
-	if is_instance_valid(_director) and _director.has_method("stop"):
-		_director.stop()
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	# 약간 연출 후 엔드 스크린
-	await get_tree().create_timer(1.0, true, false, true).timeout
-	_show_end(false)
+func _font(c: Control, size: int, bold: bool = false) -> void:
+	var path := "res://fonts/NanumGothic-Bold.ttf" if bold else "res://fonts/NanumGothic-Regular.ttf"
+	if ResourceLoader.exists(path):
+		var f: Font = load(path)
+		c.add_theme_font_override("font", f)
+		c.add_theme_font_size_override("font_size", size)
 
-func _on_survived() -> void:
-	if state != State.PLAYING:
-		return
-	state = State.CLEAR
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	_show_end(true)
+func _panel(title: String) -> VBoxContainer:
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 4)
+	var t := Label.new()
+	t.text = title
+	_font(t, 15, true)
+	t.add_theme_color_override("font_color", Color(0.6, 0.75, 1.0))
+	vb.add_child(t)
+	return vb
 
-func _show_end(win: bool) -> void:
-	get_tree().paused = true
-	var scr: Script = load("res://scripts/ui/end_screen.gd")
-	_end = Control.new()
-	_end.set_script(scr)
-	add_child(_end)
-	_end.process_mode = Node.PROCESS_MODE_ALWAYS
-	var kills := 0
-	if is_instance_valid(_director):
-		kills = _director.kills
-	var lvl := 1
-	if is_instance_valid(_player):
-		lvl = _player.level
-	_end.call("setup", win, _elapsed, kills, lvl)
-	_end.connect("restart_requested", func() -> void: start_game())
-	_end.connect("quit_to_menu", func() -> void: _show_menu())
+func _build_ui() -> void:
+	_ui = CanvasLayer.new()
+	_ui.layer = 10
+	add_child(_ui)
+	# 좌측: 홀드+스탯
+	var left := VBoxContainer.new()
+	left.set_anchors_preset(Control.PRESET_CENTER_LEFT)
+	left.position = Vector2(24, -220)
+	left.custom_minimum_size = Vector2(170, 0)
+	left.add_theme_constant_override("separation", 14)
+	_ui.add_child(left)
+	var hold_box := _panel("HOLD (Space)")
+	_hold_pv = Control.new()
+	_hold_pv.set_script(load("res://scripts/ui/preview.gd"))
+	hold_box.add_child(_hold_pv)
+	left.add_child(hold_box)
+	var stat_box := _panel("SCORE")
+	_score_l = Label.new()
+	_font(_score_l, 26, true)
+	stat_box.add_child(_score_l)
+	_level_l = Label.new()
+	_font(_level_l, 18, true)
+	stat_box.add_child(_level_l)
+	_lines_l = Label.new()
+	_font(_lines_l, 18)
+	stat_box.add_child(_lines_l)
+	_combo_l = Label.new()
+	_font(_combo_l, 16, true)
+	_combo_l.add_theme_color_override("font_color", Color(1.0, 0.7, 0.3))
+	stat_box.add_child(_combo_l)
+	left.add_child(stat_box)
+	var help := Label.new()
+	help.text = "A/D 이동(꾹 누르면 연타)\nW 하드드롭 S 소프트드롭\n←/→ 반시계/시계 회전\nSpace 홀드\nP 일시정지 R 재시작"
+	_font(help, 14)
+	help.add_theme_color_override("font_color", Color(0.65, 0.7, 0.8))
+	left.add_child(help)
+	# 우측: NEXT
+	var right := VBoxContainer.new()
+	right.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	right.position = Vector2(-194, -220)
+	right.custom_minimum_size = Vector2(170, 0)
+	right.add_theme_constant_override("separation", 14)
+	_ui.add_child(right)
+	var next_box := _panel("NEXT")
+	right.add_child(next_box)
+	for i in 3:
+		var pv := Control.new()
+		pv.set_script(load("res://scripts/ui/preview.gd"))
+		next_box.add_child(pv)
+		_next_pvs.append(pv)
+	var title := Label.new()
+	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	title.position = Vector2(-200, 12)
+	title.custom_minimum_size = Vector2(400, 0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.text = "3D TETRIS"
+	_font(title, 34, true)
+	title.add_theme_color_override("font_color", Color(0.4, 0.9, 1.0))
+	_ui.add_child(title)
+	# 중앙 아나운스
+	_announce_l = Label.new()
+	_announce_l.set_anchors_preset(Control.PRESET_CENTER)
+	_announce_l.position = Vector2(-300, -80)
+	_announce_l.custom_minimum_size = Vector2(600, 80)
+	_announce_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_font(_announce_l, 52, true)
+	_announce_l.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
+	_announce_l.modulate.a = 0.0
+	_ui.add_child(_announce_l)
+	# 일시정지 / 게임오버 패널
+	_pause_panel = _overlay("일시정지", "")
+	_build_pause_contents(_pause_panel.get_meta("box") as VBoxContainer)
+	_over_panel = _overlay("GAME OVER", "")
+	_over_score_l = _over_panel.get_meta("info") as Label
+	_pause_panel.visible = false
+	_over_panel.visible = false
+
+func _build_pause_contents(box: VBoxContainer) -> void:
+	var set_btn := Button.new()
+	set_btn.text = "⚙ 설정"
+	_font(set_btn, 19, true)
+	set_btn.custom_minimum_size = Vector2(300, 48)
+	box.add_child(set_btn)
+	var settings_box := VBoxContainer.new()
+	settings_box.visible = false
+	settings_box.add_theme_constant_override("separation", 4)
+	box.add_child(settings_box)
+	set_btn.pressed.connect(func() -> void: settings_box.visible = not settings_box.visible)
+	_add_vol_row(settings_box, "마스터 볼륨", Settings.master_volume, func(v: float) -> void:
+		Settings.master_volume = v
+		Settings.apply()
+		Settings.save_settings())
+	_add_vol_row(settings_box, "효과음 볼륨", Settings.sfx_volume, func(v: float) -> void:
+		Settings.sfx_volume = v
+		Settings.apply()
+		Settings.save_settings())
+	var resume_btn := Button.new()
+	resume_btn.text = "▶ 계속하기 (P)"
+	_font(resume_btn, 19, true)
+	resume_btn.custom_minimum_size = Vector2(300, 48)
+	resume_btn.pressed.connect(func() -> void: _toggle_pause())
+	box.add_child(resume_btn)
+	var restart_btn := Button.new()
+	restart_btn.text = "↻ 재시작 (R)"
+	_font(restart_btn, 19, true)
+	restart_btn.custom_minimum_size = Vector2(300, 48)
+	restart_btn.pressed.connect(func() -> void: _restart())
+	box.add_child(restart_btn)
+
+func _add_vol_row(parent: VBoxContainer, title: String, val: float, cb: Callable) -> void:
+	var l := Label.new()
+	l.text = "%s: %d%%" % [title, int(val * 100.0)]
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_font(l, 16, true)
+	parent.add_child(l)
+	var s := HSlider.new()
+	s.min_value = 0.0
+	s.max_value = 1.0
+	s.step = 0.05
+	s.value = val
+	s.custom_minimum_size = Vector2(300, 26)
+	s.value_changed.connect(func(v: float) -> void:
+		l.text = "%s: %d%%" % [title, int(v * 100.0)]
+		cb.call(v))
+	parent.add_child(s)
+
+func _overlay(title_text: String, sub: String) -> Control:
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0, 0, 0, 0.7)
+	_ui.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.add_child(center)
+	var vb := VBoxContainer.new()
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.add_theme_constant_override("separation", 10)
+	center.add_child(vb)
+	var t := Label.new()
+	t.text = title_text
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_font(t, 54, true)
+	t.add_theme_color_override("font_color", Color(1, 0.4, 0.4))
+	vb.add_child(t)
+	var info := Label.new()
+	info.text = sub
+	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_font(info, 20, true)
+	vb.add_child(info)
+	dim.set_meta("info", info)
+	dim.set_meta("box", vb)
+	return dim
+
+func _refresh_stats() -> void:
+	_score_l.text = "%d" % game.score
+	_level_l.text = "Lv.%d" % game.level
+	_lines_l.text = "%d 라인" % game.lines
+	if game.combo > 0:
+		_combo_l.text = "%d COMBO%s" % [game.combo, "  B2B!" if game.b2b else ""]
+	else:
+		_combo_l.text = "B2B!" if game.b2b else ""
+
+func _refresh_previews() -> void:
+	_hold_pv.set("piece", game.hold_type)
+	for i in mini(3, game.queue.size()):
+		(_next_pvs[i] as Control).set("piece", String(game.queue[i]))
+
+func _announce(text: String, big: bool) -> void:
+	_announce_l.text = text
+	_font(_announce_l, 52 if big else 36, true)
+	if is_instance_valid(_announce_tw):
+		_announce_tw.kill()
+	_announce_l.modulate.a = 1.0
+	_announce_l.scale = Vector2(0.7, 0.7)
+	_announce_l.pivot_offset = Vector2(300, 40)
+	_announce_tw = create_tween()
+	_announce_tw.set_parallel(true)
+	_announce_tw.tween_property(_announce_l, "scale", Vector2.ONE, 0.18)
+	_announce_tw.tween_property(_announce_l, "modulate:a", 0.0, 0.9).set_delay(0.5)
+
+func _on_cleared_ui(rows: Array, label: String, points: int) -> void:
+	if rows.size() > 0 and rows.size() < 4 and label != "" and not label.begins_with("T-SPIN"):
+		_announce("%s  +%d" % [label, points], false)
+
+func _show_over() -> void:
+	_over_score_l.text = "Score %d · Lv.%d · %d라인 — R로 재시작" % [game.score, game.level, game.lines]
+	_over_panel.visible = true
+
+# ---------- 헤드리스 자가검증 ----------
+
+func _run_autotest() -> void:
+	await get_tree().process_frame
+	var g := TetrisGame.new()
+	print("[AUTOTEST] logic=", g.run_self_test())
+	print("[AUTOTEST] view_locked=", view.get("_locked").size() >= 0)
+	print("[AUTOTEST] sfx_bank=", Sfx.get("_bank").size())
+	print("[AUTOTEST] PASS")
