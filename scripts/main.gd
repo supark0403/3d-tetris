@@ -143,7 +143,7 @@ func _build_ui() -> void:
 	stat_box.add_child(_combo_l)
 	left.add_child(stat_box)
 	var help := Label.new()
-	help.text = "A/D 이동(꾹 누르면 연타)\nW 하드드롭 S 소프트드롭\n←/→ 반시계/시계 회전\nSpace 홀드\nP 일시정지 R 재시작"
+	help.text = "A/D 이동(꾹 누르면 연타)\nW 하드드롭 S 소프트드롭\n←/→ 반시계/시계, ↑ 180도 회전\nSpace 홀드\nP 일시정지 R 재시작"
 	_font(help, 14)
 	help.add_theme_color_override("font_color", Color(0.65, 0.7, 0.8))
 	left.add_child(help)
@@ -166,7 +166,7 @@ func _build_ui() -> void:
 	title.position = Vector2(-200, 12)
 	title.custom_minimum_size = Vector2(400, 0)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.text = "3D TETRIS v1.4"
+	title.text = "3D TETRIS v1.5"
 	_font(title, 34, true)
 	title.add_theme_color_override("font_color", Color(0.4, 0.9, 1.0))
 	_ui.add_child(title)
@@ -237,7 +237,7 @@ func _build_menu() -> void:
 	sc3.add_child(_menu_settings)
 	vb.add_child(sc3)
 	var help := Label.new()
-	help.text = "A/D 이동(꾹 누르면 연타) · W 하드드롭 · S 소프트드롭 · ←/→ 회전 · Space 홀드 · 키 변경은 설정에서"
+	help.text = "A/D 이동(꾹 누르면 연타) · W 하드드롭 · S 소프트드롭 · ←/→ 회전 · ↑ 180도 · Space 홀드 · 키 변경은 설정에서"
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_font(help, 15)
 	help.add_theme_color_override("font_color", Color(0.65, 0.7, 0.8))
@@ -327,7 +327,7 @@ func _announce(text: String, big: bool) -> void:
 	_announce_tw.tween_property(_announce_l, "modulate:a", 0.0, 0.9).set_delay(0.5)
 
 func _on_cleared_ui(rows: Array, label: String, points: int) -> void:
-	if rows.size() > 0 and rows.size() < 4 and label != "" and not label.begins_with("T-SPIN"):
+	if rows.size() > 0 and rows.size() < 4 and label != "" and "-SPIN" not in label:
 		_announce("%s  +%d" % [label, points], false)
 
 func _show_over() -> void:

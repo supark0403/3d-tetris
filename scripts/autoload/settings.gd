@@ -6,7 +6,7 @@ var sfx_volume := 0.9
 
 const PATH := "user://tetris_settings.cfg"
 
-const GAME_ACTIONS: Array[String] = ["move_left", "move_right", "soft_drop", "hard_drop", "rot_ccw", "rot_cw", "hold_piece"]
+const GAME_ACTIONS: Array[String] = ["move_left", "move_right", "soft_drop", "hard_drop", "rot_ccw", "rot_cw", "rot_180", "hold_piece"]
 const ACTION_LABELS := {
 	"move_left": "왼쪽 이동",
 	"move_right": "오른쪽 이동",
@@ -14,6 +14,7 @@ const ACTION_LABELS := {
 	"hard_drop": "하드드롭",
 	"rot_ccw": "반시계 회전",
 	"rot_cw": "시계 회전",
+	"rot_180": "180도 회전",
 	"hold_piece": "홀드",
 }
 const DEFAULT_KEYS := {
@@ -23,6 +24,7 @@ const DEFAULT_KEYS := {
 	"hard_drop": KEY_W,
 	"rot_ccw": KEY_LEFT,
 	"rot_cw": KEY_RIGHT,
+	"rot_180": KEY_UP,
 	"hold_piece": KEY_SPACE,
 }
 var bindings := {}
