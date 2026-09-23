@@ -24,6 +24,11 @@
 Godot 4.7에서 `project.godot` 열기 → `F5` (`res://scenes/main.tscn`).
 헤드리스 자가검증: `-- --autotest` (로직 7종 + 뷰/사운드뱅크 체크).
 
-## 웹 배포
-`export_presets.cfg` Web 프리셋 + `.github/workflows/web-export.yml` 그대로 사용.
-이번 빌드는 에셋이 없어 `index.pck`가 수 MB 수준이라 Pages 바로 배포 가능.
+## 웹 배포 (GitHub Pages)
+`tools/publish_web.bat` 더블클릭 한 번이면 끝난다. 내용:
+1. `godot --headless --export-release Web` 로 `build/web` 생성
+2. orphan `gh-pages` 브랜치에 빌드 결과만 커밋 → 강제 푸시
+3. 주소: https://supark0403.github.io/3d-tetris/
+
+Pages 최초 1회만 리포 Settings → Pages → Deploy from branch → `gh-pages` 선택.
+(CI 워크플로 대신 수동 배포 — 토큰에 workflow 권한이 없어도 됨.)
