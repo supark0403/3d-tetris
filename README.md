@@ -2,7 +2,7 @@
 
 가이드라인 기반 3D 테트리스 (Godot 4.7, GL Compatibility).
 
-## 조작
+## 조작 (설정에서 변경 가능, P/Esc·R 고정)
 - `A` / `D`: 좌 / 우 이동 — **꾹 누르면 DAS(0.15s) 후 ARR(0.04s) 자동 연타**
 - `W`: 하드드롭 (+2/칸), `S`: 소프트드롭 (+1/칸, 20배속)
 - `←`: 반시계 회전, `→`: 시계 회전 (SRS + 킥)
@@ -21,8 +21,8 @@
 - VFX: 라인 플래시+파편, 하드드롭 더스트, 카메라 셰이크, TETRIS/T-SPIN 팝업
 
 ## 실행
-Godot 4.7에서 `project.godot` 열기 → `F5` (`res://scenes/main.tscn`).
-헤드리스 자가검증: `-- --autotest` (로직 7종 + 뷰/사운드뱅크 체크).
+Godot 4.7에서 `project.godot` 열기 → `F5`. 메인 메뉴에서 게임 시작,
+설정(볼륨·키 바인딩, `user://tetris_settings.cfg` 저장) 후 플레이.
 
 ## 웹 배포 (GitHub Pages)
 `tools/publish_web.bat` 더블클릭 한 번이면 끝난다. 내용:

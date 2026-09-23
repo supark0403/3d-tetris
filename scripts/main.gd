@@ -15,6 +15,10 @@ var _announce_tw: Tween
 var _pause_panel: Control
 var _over_panel: Control
 var _over_score_l: Label
+var _menu: Control = null
+var _menu_settings: Control = null
+var _pause_settings: Control = null
+var in_menu := true
 
 func _ready() -> void:
 	game = TetrisGame.new()
@@ -23,6 +27,7 @@ func _ready() -> void:
 	view.set_script(load("res://scripts/tetris/view3d.gd"))
 	add_child(view)
 	game.new_game()
+	game.paused = true # 메뉴에서 시작 대기
 	view.attach(game)
 	_build_ui()
 	game.connect("stats_changed", _refresh_stats)
@@ -36,11 +41,20 @@ func _ready() -> void:
 		_run_autotest()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _is_listening():
+		return
 	if event.is_action_pressed("pause_game"):
-		if not game.over:
+		if not in_menu and not game.over:
 			_toggle_pause()
 	elif event.is_action_pressed("restart_game"):
-		_restart()
+		if not in_menu:
+			_restart()
+
+func _is_listening() -> bool:
+	for p in [_menu_settings, _pause_settings]:
+		if is_instance_valid(p) and String(p.get("listening_action")) != "":
+			return true
+	return false
 
 func _toggle_pause() -> void:
 	game.paused = not game.paused
@@ -48,9 +62,33 @@ func _toggle_pause() -> void:
 	_pause_panel.visible = game.paused
 
 func _restart() -> void:
+	if in_menu:
+		return
 	game.new_game()
+	game.paused = false
 	_over_panel.visible = false
 	_pause_panel.visible = false
+	_refresh_stats()
+	_refresh_previews()
+
+func start_game() -> void:
+	in_menu = false
+	_menu.visible = false
+	_over_panel.visible = false
+	_pause_panel.visible = false
+	game.new_game()
+	game.paused = false
+	_refresh_stats()
+	_refresh_previews()
+	Sfx.play("level", 0.7)
+
+func quit_to_menu() -> void:
+	in_menu = true
+	game.new_game()
+	game.paused = true
+	_over_panel.visible = false
+	_pause_panel.visible = false
+	_menu.visible = true
 	_refresh_stats()
 	_refresh_previews()
 
@@ -128,7 +166,7 @@ func _build_ui() -> void:
 	title.position = Vector2(-200, 12)
 	title.custom_minimum_size = Vector2(400, 0)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.text = "3D TETRIS v1.2"
+	title.text = "3D TETRIS v1.3"
 	_font(title, 34, true)
 	title.add_theme_color_override("font_color", Color(0.4, 0.9, 1.0))
 	_ui.add_child(title)
@@ -142,62 +180,97 @@ func _build_ui() -> void:
 	_announce_l.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
 	_announce_l.modulate.a = 0.0
 	_ui.add_child(_announce_l)
-	# 일시정지 / 게임오버 패널
+	# 일시정지 / 게임오버 패널 + 메인 메뉴
 	_pause_panel = _overlay("일시정지", "")
 	_build_pause_contents(_pause_panel.get_meta("box") as VBoxContainer)
 	_over_panel = _overlay("GAME OVER", "")
 	_over_score_l = _over_panel.get_meta("info") as Label
+	var over_box := _over_panel.get_meta("box") as VBoxContainer
+	var over_restart := _menu_button("↻ 다시 시작 (R)")
+	over_restart.pressed.connect(func() -> void: _restart())
+	over_box.add_child(over_restart)
+	var over_menu := _menu_button("🏠 메인 메뉴")
+	over_menu.pressed.connect(func() -> void: quit_to_menu())
+	over_box.add_child(over_menu)
 	_pause_panel.visible = false
 	_over_panel.visible = false
+	_build_menu()
+
+func _build_menu() -> void:
+	_menu = ColorRect.new()
+	(_menu as ColorRect).set_anchors_preset(Control.PRESET_FULL_RECT)
+	(_menu as ColorRect).color = Color(0, 0, 0, 0.72)
+	_ui.add_child(_menu)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_menu.add_child(center)
+	var vb := VBoxContainer.new()
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.add_theme_constant_override("separation", 12)
+	center.add_child(vb)
+	var title := Label.new()
+	title.text = "3D TETRIS"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_font(title, 72, true)
+	title.add_theme_color_override("font_color", Color(0.4, 0.9, 1.0))
+	vb.add_child(title)
+	var sub := Label.new()
+	sub.text = "가이드라인 3D 테트리스 — SRS · 7-bag · T스핀 · 홀드 · DAS"
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_font(sub, 18)
+	sub.add_theme_color_override("font_color", Color(0.75, 0.8, 0.9))
+	vb.add_child(sub)
+	var start_btn := _menu_button("▶  게임 시작")
+	start_btn.custom_minimum_size = Vector2(320, 60)
+	start_btn.pressed.connect(func() -> void: start_game())
+	var sc := CenterContainer.new()
+	sc.add_child(start_btn)
+	vb.add_child(sc)
+	var set_btn := _menu_button("⚙ 설정")
+	set_btn.pressed.connect(func() -> void: _menu_settings.visible = not _menu_settings.visible)
+	var sc2 := CenterContainer.new()
+	sc2.add_child(set_btn)
+	vb.add_child(sc2)
+	_menu_settings = _make_settings_panel()
+	_menu_settings.visible = false
+	var sc3 := CenterContainer.new()
+	sc3.add_child(_menu_settings)
+	vb.add_child(sc3)
+	var help := Label.new()
+	help.text = "A/D 이동(꾹 누르면 연타) · W 하드드롭 · S 소프트드롭 · ←/→ 회전 · Space 홀드 · 키 변경은 설정에서"
+	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_font(help, 15)
+	help.add_theme_color_override("font_color", Color(0.65, 0.7, 0.8))
+	vb.add_child(help)
 
 func _build_pause_contents(box: VBoxContainer) -> void:
-	var set_btn := Button.new()
-	set_btn.text = "⚙ 설정"
-	_font(set_btn, 19, true)
-	set_btn.custom_minimum_size = Vector2(300, 48)
+	var set_btn := _menu_button("⚙ 설정")
+	set_btn.pressed.connect(func() -> void: _pause_settings.visible = not _pause_settings.visible)
 	box.add_child(set_btn)
-	var settings_box := VBoxContainer.new()
-	settings_box.visible = false
-	settings_box.add_theme_constant_override("separation", 4)
-	box.add_child(settings_box)
-	set_btn.pressed.connect(func() -> void: settings_box.visible = not settings_box.visible)
-	_add_vol_row(settings_box, "마스터 볼륨", Settings.master_volume, func(v: float) -> void:
-		Settings.master_volume = v
-		Settings.apply()
-		Settings.save_settings())
-	_add_vol_row(settings_box, "효과음 볼륨", Settings.sfx_volume, func(v: float) -> void:
-		Settings.sfx_volume = v
-		Settings.apply()
-		Settings.save_settings())
-	var resume_btn := Button.new()
-	resume_btn.text = "▶ 계속하기 (P)"
-	_font(resume_btn, 19, true)
-	resume_btn.custom_minimum_size = Vector2(300, 48)
+	_pause_settings = _make_settings_panel()
+	_pause_settings.visible = false
+	box.add_child(_pause_settings)
+	var resume_btn := _menu_button("▶ 계속하기 (P)")
 	resume_btn.pressed.connect(func() -> void: _toggle_pause())
 	box.add_child(resume_btn)
-	var restart_btn := Button.new()
-	restart_btn.text = "↻ 재시작 (R)"
-	_font(restart_btn, 19, true)
-	restart_btn.custom_minimum_size = Vector2(300, 48)
+	var restart_btn := _menu_button("↻ 재시작 (R)")
 	restart_btn.pressed.connect(func() -> void: _restart())
 	box.add_child(restart_btn)
+	var menu_btn := _menu_button("🏠 메인 메뉴")
+	menu_btn.pressed.connect(func() -> void: quit_to_menu())
+	box.add_child(menu_btn)
 
-func _add_vol_row(parent: VBoxContainer, title: String, val: float, cb: Callable) -> void:
-	var l := Label.new()
-	l.text = "%s: %d%%" % [title, int(val * 100.0)]
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_font(l, 16, true)
-	parent.add_child(l)
-	var s := HSlider.new()
-	s.min_value = 0.0
-	s.max_value = 1.0
-	s.step = 0.05
-	s.value = val
-	s.custom_minimum_size = Vector2(300, 26)
-	s.value_changed.connect(func(v: float) -> void:
-		l.text = "%s: %d%%" % [title, int(v * 100.0)]
-		cb.call(v))
-	parent.add_child(s)
+func _menu_button(text: String) -> Button:
+	var b := Button.new()
+	b.text = text
+	_font(b, 19, true)
+	b.custom_minimum_size = Vector2(300, 48)
+	return b
+
+func _make_settings_panel() -> Control:
+	var p := PanelContainer.new()
+	p.set_script(load("res://scripts/ui/settings_panel.gd"))
+	return p
 
 func _overlay(title_text: String, sub: String) -> Control:
 	var dim := ColorRect.new()
