@@ -40,6 +40,8 @@ var b2b := false
 var over := false
 var paused := false
 var last_rotate := false
+var last_action_text := "SPAWN"
+var last_lock_report := ""
 
 var _fall_acc := 0.0
 var _lock_acc := 0.0
@@ -181,6 +183,7 @@ func try_move(dir: int) -> bool:
 	if fits(cells):
 		active_pos.x += dir
 		last_rotate = false
+		last_action_text = "MOVE"
 		_ground_reset()
 		_sfx("move")
 		emit_signal("active_changed")
@@ -192,7 +195,9 @@ func try_rotate(cw: bool) -> bool:
 		return false
 	var to_rot := posmod(active_rot + (1 if cw else -1), 4)
 	var base: Array = TetrisPieces.cells_for(active_type, to_rot)
-	for k in TetrisPieces.kicks_for(active_type, active_rot, to_rot):
+	var kicks: Array = TetrisPieces.kicks_for(active_type, active_rot, to_rot)
+	for ki in kicks.size():
+		var k: Vector2i = kicks[ki]
 		var cells: Array = []
 		for c in base:
 			cells.append(active_pos + c + k)
@@ -200,6 +205,7 @@ func try_rotate(cw: bool) -> bool:
 			active_pos += k
 			active_rot = to_rot
 			last_rotate = true
+			last_action_text = "ROT k%d" % (ki + 1)
 			_ground_reset()
 			_sfx("rotate")
 			emit_signal("active_changed")
@@ -211,7 +217,9 @@ func try_rotate_180() -> bool:
 		return false
 	var to_rot := posmod(active_rot + 2, 4)
 	var base: Array = TetrisPieces.cells_for(active_type, to_rot)
-	for k in TetrisPieces.kicks_for(active_type, active_rot, to_rot):
+	var kicks: Array = TetrisPieces.kicks_for(active_type, active_rot, to_rot)
+	for ki in kicks.size():
+		var k: Vector2i = kicks[ki]
 		var cells: Array = []
 		for c in base:
 			cells.append(active_pos + c + k)
@@ -219,6 +227,7 @@ func try_rotate_180() -> bool:
 			active_pos += k
 			active_rot = to_rot
 			last_rotate = true
+			last_action_text = "ROT180 k%d" % (ki + 1)
 			_ground_reset()
 			_sfx("rotate")
 			emit_signal("active_changed")
@@ -276,6 +285,7 @@ func hard_drop() -> void:
 	score += dist * 2
 	emit_signal("hard_dropped", cells)
 	_sfx("hard")
+	last_action_text = "HARD"
 	lock_piece(true)
 
 func hold() -> void:
@@ -296,6 +306,12 @@ func lock_piece(from_hard: bool) -> void:
 	if active_type == "":
 		return
 	var spin_piece := _detect_spin()
+	var cor0 := _tspin_corners()
+	var rt := active_type
+	var rr := active_rot
+	var rp := active_pos
+	var s0 := score
+	var l0 := lines
 	var cells := active_cells()
 	var color: int = TetrisPieces.COLOR_INDEX[active_type]
 	var all_hidden := true
@@ -315,6 +331,7 @@ func lock_piece(from_hard: bool) -> void:
 		_game_over()
 		return
 	_eval_clear(spin_piece)
+	last_lock_report = "LOCK %s r%d piv%s act[%s] spin[%s] cor%d +%dL +%dpt" % [rt, rr, str(rp), last_action_text, (spin_piece if spin_piece != "" else "-"), cor0, lines - l0, score - s0]
 	if over:
 		return
 	can_hold = true
@@ -342,8 +359,11 @@ func _is_immobile() -> bool:
 	return true
 
 func _is_tspin() -> bool:
+	return _tspin_corners() >= 3
+
+func _tspin_corners() -> int:
 	if active_type != "T" or not last_rotate:
-		return false
+		return 0
 	var p := active_pos
 	var n := 0
 	for d in [Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(1, 1)]:
@@ -352,7 +372,7 @@ func _is_tspin() -> bool:
 			n += 1
 		elif (grid[v.y] as Array)[v.x] != 0:
 			n += 1
-	return n >= 3
+	return n
 
 func _eval_clear(spin: String) -> void:
 	var full: Array = []
@@ -453,6 +473,7 @@ func _spawn_specific(t: String) -> void:
 	active_rot = 0
 	active_pos = Vector2i(4, 1)
 	last_rotate = false
+	last_action_text = "SPAWN"
 	_lock_acc = 0.0
 	_resets = 0
 	_fall_acc = 0.0

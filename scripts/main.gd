@@ -18,6 +18,8 @@ var _over_score_l: Label
 var _menu: Control = null
 var _menu_settings: Control = null
 var _pause_settings: Control = null
+var _debug := false
+var _debug_l: Label = null
 var in_menu := true
 
 func _ready() -> void:
@@ -42,6 +44,11 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and (event as InputEventKey).echo:
+		return
+	if event is InputEventKey and (event as InputEventKey).keycode == KEY_F3 and event.pressed:
+		_debug = not _debug
+		if is_instance_valid(_debug_l):
+			_debug_l.visible = _debug
 		return
 	if _is_listening():
 		return
@@ -168,7 +175,7 @@ func _build_ui() -> void:
 	title.position = Vector2(-200, 12)
 	title.custom_minimum_size = Vector2(400, 0)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.text = "3D TETRIS v1.7"
+	title.text = "3D TETRIS v1.8"
 	_font(title, 34, true)
 	title.add_theme_color_override("font_color", Color(0.4, 0.9, 1.0))
 	_ui.add_child(title)
@@ -197,6 +204,21 @@ func _build_ui() -> void:
 	_pause_panel.visible = false
 	_over_panel.visible = false
 	_build_menu()
+	_debug_l = Label.new()
+	_debug_l.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_debug_l.position = Vector2(12, 12)
+	_font(_debug_l, 15, true)
+	_debug_l.add_theme_color_override("font_color", Color(0.4, 1.0, 0.4))
+	_debug_l.visible = false
+	_ui.add_child(_debug_l)
+
+func _process(_delta: float) -> void:
+	if not is_instance_valid(_debug_l) or not _debug_l.visible:
+		return
+	var act := "-"
+	if is_instance_valid(game) and game.active_type != "":
+		act = "%s r%d piv%s" % [game.active_type, game.active_rot, str(game.active_pos)]
+	_debug_l.text = "F3 ACT %s | %s\n%s" % [act, game.last_action_text, game.last_lock_report]
 
 func _build_menu() -> void:
 	_menu = ColorRect.new()
