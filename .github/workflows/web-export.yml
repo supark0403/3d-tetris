@@ -1,0 +1,54 @@
+name: Web Export (Godot 4.7)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Godot 4.7
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2-stable
+          use-dotnet: false
+
+      - name: Setup export templates
+        run: |
+          godot --headless --export-pack none || true
+          mkdir -p ~/.local/share/godot/export_templates
+          cd /tmp
+          wget -q https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz -O templates.tpz
+          mkdir -p ~/.local/share/godot/export_templates/4.7.2.stable
+          unzip -o -q templates.tpz -d ~/.local/share/godot/export_templates/4.7.2.stable
+          mv ~/.local/share/godot/export_templates/4.7.2.stable/templates/* ~/.local/share/godot/export_templates/4.7.2.stable/ || true
+
+      - name: Import project
+        run: godot --headless --path . --import
+
+      - name: Export Web
+        run: |
+          mkdir -p ../build/web
+          godot --headless --path . --export-release Web ../build/web/index.html
+
+      - name: Add COI headers (.htaccess fallback + _headers)
+        run: |
+          printf 'Cross-Origin-Opener-Policy: same-origin\nCross-Origin-Embedder-Policy: require-corp\n' > ../build/web/_headers
+          ls -lh ../build/web
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ../build/web
+          publish_branch: gh-pages
