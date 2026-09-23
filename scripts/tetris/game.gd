@@ -707,6 +707,59 @@ func run_self_test() -> String:
 	lock_piece(false)
 	if score != s12 + 100:
 		fails.append("ospin-score=%d" % (score - s12))
+	# 16. 진짜 TST 타워 진입 (채널 낙하 → rot3 → CW (0,2) 슬롯킥 → 트리플)
+	new_game()
+	_testing = true
+	for c in COLS:
+		(grid[19] as Array)[c] = 4
+	for c in COLS:
+		if c != 9:
+			(grid[20] as Array)[c] = 4
+			(grid[21] as Array)[c] = 4
+	for c in COLS:
+		if c != 4 and c != 5 and c != 6:
+			(grid[18] as Array)[c] = 4
+	for c in COLS:
+		if c != 5:
+			(grid[17] as Array)[c] = 4
+	(grid[16] as Array)[3] = 4
+	(grid[16] as Array)[6] = 4
+	(grid[15] as Array)[3] = 4
+	_spawn_specific("T")
+	if not try_move(1):
+		fails.append("tst-move")
+	if not try_rotate(false):
+		fails.append("tst-rot3")
+	var fell := 0
+	while _step_down(false):
+		fell += 1
+		if fell > 30:
+			break
+	if active_pos != Vector2i(5, 16):
+		fails.append("tst-rest=%s" % str(active_pos))
+	if not try_rotate(true):
+		fails.append("tst-finalrot")
+	elif active_rot != 0 or active_pos != Vector2i(5, 18):
+		fails.append("tst-finalpos=%d,%s" % [active_rot, str(active_pos)])
+	elif last_action_text != "ROT k4":
+		fails.append("tst-kick=%s" % last_action_text)
+	else:
+		var s15 := score
+		var l15 := lines
+		lock_piece(false)
+		if lines != l15 + 3:
+			fails.append("tst-lines=%d" % lines)
+		if score != s15 + 1600:
+			fails.append("tst-score=%d" % (score - s15))
+		for r in ROWS:
+			var fr := true
+			for c in COLS:
+				if (grid[r] as Array)[c] == 0:
+					fr = false
+					break
+			if fr:
+				fails.append("tst-leftover=%d" % r)
+				break
 	_testing = false
 	if fails.is_empty():
 		return "PASS"
