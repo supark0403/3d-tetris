@@ -41,6 +41,8 @@ func _ready() -> void:
 		_run_autotest()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and (event as InputEventKey).echo:
+		return
 	if _is_listening():
 		return
 	if event.is_action_pressed("pause_game"):
@@ -166,7 +168,7 @@ func _build_ui() -> void:
 	title.position = Vector2(-200, 12)
 	title.custom_minimum_size = Vector2(400, 0)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.text = "3D TETRIS v1.6"
+	title.text = "3D TETRIS v1.7"
 	_font(title, 34, true)
 	title.add_theme_color_override("font_color", Color(0.4, 0.9, 1.0))
 	_ui.add_child(title)

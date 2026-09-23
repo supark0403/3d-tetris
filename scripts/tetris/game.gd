@@ -138,6 +138,8 @@ func _update_das(delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if over or paused or _testing:
 		return
+	if event is InputEventKey and (event as InputEventKey).echo:
+		return # 홀드 난사 방지: 가장자리 입력만 받음
 	if event.is_action_pressed("rot_ccw"):
 		try_rotate(false)
 	elif event.is_action_pressed("rot_cw"):
@@ -585,6 +587,18 @@ func run_self_test() -> String:
 		_game_over()
 	if not over:
 		fails.append("over-not-detected")
+	# 15. 에코 입력 무시 (회전키 홀드 난사 방지)
+	new_game()
+	_testing = false
+	var r0 := active_rot
+	var ech := InputEventKey.new()
+	ech.pressed = true
+	ech.echo = true
+	ech.physical_keycode = KEY_LEFT
+	ech.keycode = KEY_LEFT
+	_input(ech)
+	if active_rot != r0:
+		fails.append("echo-rot")
 	# 14. 5번째 킥 심층 진입 (0→R, test5 (-1,2)로 TST식 진입)
 	new_game()
 	_testing = true
