@@ -74,6 +74,8 @@ func new_game() -> void:
 	paused = false
 	_refill_queue()
 	_spawn()
+	emit_signal("grid_changed")
+	emit_signal("active_changed")
 	emit_signal("stats_changed")
 
 # ---------- 진행 ----------
