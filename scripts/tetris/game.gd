@@ -585,6 +585,21 @@ func run_self_test() -> String:
 		_game_over()
 	if not over:
 		fails.append("over-not-detected")
+	# 14. 5번째 킥 심층 진입 (0→R, test5 (-1,2)로 TST식 진입)
+	new_game()
+	_testing = true
+	(grid[19] as Array)[5] = 4
+	(grid[17] as Array)[4] = 4
+	active_type = "T"
+	active_rot = 0
+	active_pos = Vector2i(5, 18)
+	last_rotate = false
+	if not try_rotate(true):
+		fails.append("kick5-fail")
+	elif active_rot != 1 or active_pos != Vector2i(4, 20):
+		fails.append("kick5-pos=%d,%s" % [active_rot, str(active_pos)])
+	elif not last_rotate:
+		fails.append("kick5-flag")
 	# 10. 180 킥 진입 (0→2, (0,0) 실패 → (0,-1) 성공)
 	new_game()
 	_testing = true

@@ -12,7 +12,7 @@ func _ready() -> void:
 	margin.add_theme_constant_override("margin_bottom", 14)
 	add_child(margin)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(360, 400)
+	scroll.custom_minimum_size = Vector2(360, 320)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	margin.add_child(scroll)
 	var vbox := VBoxContainer.new()

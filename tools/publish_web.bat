@@ -8,6 +8,7 @@ echo [1/3] Godot web export...
 "E:\Godot\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe" --headless --path "%PROJ%" --export-release Web "%OUT%\index.html"
 if errorlevel 1 exit /b 1
 del /q "%OUT%\*.import" 2>nul
+copy /y "%PROJ%\tools\sw-unregister.js" "%OUT%\index.service.worker.js" >nul
 set CLONE=%TEMP%\tetris-pages
 echo [2/3] gh-pages 브랜치 구성...
 if exist "%CLONE%" rmdir /s /q "%CLONE%"
