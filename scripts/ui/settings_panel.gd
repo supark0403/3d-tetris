@@ -11,9 +11,14 @@ func _ready() -> void:
 	margin.add_theme_constant_override("margin_top", 14)
 	margin.add_theme_constant_override("margin_bottom", 14)
 	add_child(margin)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(360, 400)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	margin.add_child(scroll)
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 6)
-	margin.add_child(vbox)
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(vbox)
 	var t := Label.new()
 	t.text = "설정"
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
