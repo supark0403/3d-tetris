@@ -338,8 +338,9 @@ func _eval_clear(tspin: bool) -> void:
 			combo = -1
 		emit_signal("stats_changed")
 		return
-	for r in full:
-		grid.remove_at(r)
+	full.sort()
+	for i in range(full.size() - 1, -1, -1):
+		grid.remove_at(full[i])
 	for i in n:
 		var row: Array = []
 		for c in COLS:
@@ -481,7 +482,53 @@ func run_self_test() -> String:
 	hard_drop()
 	if score <= s0 or active_type == "":
 		fails.append("harddrop")
-	# 7. 게임오버 (스폰 막힘 → 블록아웃)
+	# 7. T스핀 트리플 풀파이프라인 (검출+3줄+1600점)
+	new_game()
+	_testing = true
+	for r in [19, 20, 21]:
+		for c in COLS:
+			(grid[r] as Array)[c] = 4
+	for x in [4, 6]:
+		(grid[18] as Array)[x] = 4
+	(grid[17] as Array)[4] = 4
+	(grid[16] as Array)[4] = 4
+	active_type = "T"
+	active_rot = 1
+	active_pos = Vector2i(5, 17)
+	last_rotate = true
+	var s_before := score
+	var l_before := lines
+	lock_piece(false)
+	if lines != l_before + 3:
+		fails.append("tst-lines=%d" % lines)
+	if score != s_before + 1600:
+		fails.append("tst-score=%d" % (score - s_before))
+	if grid.size() != ROWS:
+		fails.append("tst-gridsize=%d" % grid.size())
+	for r in ROWS:
+		var full_row := true
+		for c in COLS:
+			if (grid[r] as Array)[c] == 0:
+				full_row = false
+				break
+		if full_row:
+			fails.append("tst-leftover=%d" % r)
+			break
+	# 8. 킥 회전 진입 ((0,0) 실패 → (-1,0) 킥 성공)
+	new_game()
+	_testing = true
+	(grid[17] as Array)[5] = 4
+	active_type = "T"
+	active_rot = 0
+	active_pos = Vector2i(5, 18)
+	last_rotate = false
+	if not try_rotate(true):
+		fails.append("kick-fail")
+	elif active_pos != Vector2i(4, 18):
+		fails.append("kick-pos=%s" % str(active_pos))
+	elif not last_rotate:
+		fails.append("kick-flag")
+	# 9. 게임오버 (스폰 막힘 → 블록아웃)
 	new_game()
 	_testing = true
 	for c in COLS:
